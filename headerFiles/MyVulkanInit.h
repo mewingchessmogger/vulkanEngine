@@ -42,6 +42,9 @@ private:
 	VkRenderPass renderPass;
 	VkBuffer vertexBuffer;
 	VkDeviceMemory vertexBufferMemory;
+	VkBuffer indexBuffer;
+	VkDeviceMemory indexBufferMemory;
+
 	VkPipelineLayout pipelineLayout;
 
 	VkPipeline graphicsPipeline;
@@ -107,11 +110,18 @@ private:
 	};
 	//pos, color
 	const std::vector<Vertex> vertices = {
-	{{0.0f, -0.5f}, {0.5f, 0.3f, 0.0f}},
-	{{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-	{{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+	{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+	{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+	{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+	{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+	};
+	//only supports up to 65k ish vals
+	const std::vector<uint16_t > indexIndices = {
+		0,1,2,
+		2,3,0
 
 	};
+
 	
 
 	uint32_t currentFrame = 0;
@@ -121,7 +131,8 @@ private:
 	void initWindow();
 	void createInstance();
 	void pickPhysicalDevice();
-
+	void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
+		
 	bool isDeviceSuitable(VkPhysicalDevice device);
 	bool checkDeviceExtensionSupport(VkPhysicalDevice device);
 
@@ -129,9 +140,10 @@ private:
 	void createLogicalDevice();
 	void createSurface();
 	void createVertexBuffer();
-	
+	static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
 	uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
-
+	void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
+	void createIndexBuffer();
 	swapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
 	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
 	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);

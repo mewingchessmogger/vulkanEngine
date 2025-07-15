@@ -46,34 +46,126 @@ void MyVlk::transitionImageLayout(
 	
 	};
 	
-
-void MyVlk::createVertexBuffer() {
+void MyVlk::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,VkMemoryPropertyFlags properties,VkBuffer& buffer, VkDeviceMemory& bufferMemory) {
 	VkBufferCreateInfo bufferInfo{};
 	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	bufferInfo.size = sizeof(vertices[0]) * vertices.size();
-	bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+	bufferInfo.size = size;
+	bufferInfo.usage = usage;
 	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-	if (vkCreateBuffer(device, &bufferInfo, nullptr, &vertexBuffer) != VK_SUCCESS) {
+	if (vkCreateBuffer(device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create vertex buffer!");
 	}
+
 	VkMemoryRequirements memRequirements;
-	vkGetBufferMemoryRequirements(device, vertexBuffer, &memRequirements);
+	vkGetBufferMemoryRequirements(device, buffer, &memRequirements);
 	VkMemoryAllocateInfo allocInfo{};
 	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	allocInfo.allocationSize = memRequirements.size;
-	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, 
-											   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-	if (vkAllocateMemory(device, &allocInfo, nullptr, &vertexBufferMemory) != VK_SUCCESS) {
+	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
+
+	if (vkAllocateMemory(device, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
 		throw std::runtime_error("YOU FAILED TO allocate VERTEX MEMORY jesse");
 	}
 
-	vkBindBufferMemory(device, vertexBuffer, vertexBufferMemory,0);
+	vkBindBufferMemory(device, buffer, bufferMemory, 0);
+
+}
+
+void MyVlk::createIndexBuffer() {
+	VkDeviceSize bufferSize = indexIndices.size() * sizeof(indexIndices[0]);
+	
+	VkBuffer stagingBuffer;
+	VkDeviceMemory stagingMemory;
+	createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+		stagingBuffer,
+		stagingMemory);
+
 
 	void* data;
-	vkMapMemory(device, vertexBufferMemory, 0, bufferInfo.size, 0, &data);
-	memcpy(data, vertices.data(), (size_t)bufferInfo.size);
-	vkUnmapMemory(device, vertexBufferMemory);
+	vkMapMemory(device, stagingMemory, 0, bufferSize, 0, &data); //creates pointer from cpu to gpu
+	memcpy(data, indexIndices.data(), (size_t)bufferSize);				   //actually copies to gpu
+	vkUnmapMemory(device, stagingMemory);			//uncreates tthe pointer and becomes and implication for cpu to release resoursces or smthn
+
+
+	createBuffer(bufferSize,
+		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+		indexBuffer,
+		indexBufferMemory);
+
+	copyBuffer(stagingBuffer, indexBuffer, bufferSize);
+	vkDestroyBuffer(device, stagingBuffer, nullptr);
+	vkFreeMemory(device, stagingMemory, nullptr);
+
+
+}
+void MyVlk::createVertexBuffer() {
+	VkDeviceSize bufferSize = vertices.size() * sizeof(vertices[0]);
+	
+	VkBuffer stagingBuffer;
+	VkDeviceMemory stagingMemory;
+	createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+		stagingBuffer,
+		stagingMemory);
+
+
+	void* data;
+	vkMapMemory(device, stagingMemory, 0, bufferSize, 0, &data); //creates pointer from cpu to gpu
+	memcpy(data, vertices.data(), (size_t)bufferSize);				   //actually copies to gpu
+	vkUnmapMemory(device, stagingMemory);			//uncreates tthe pointer and becomes and implication for cpu to release resoursces or smthn
+
+
+	createBuffer(bufferSize,
+		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+		vertexBuffer,
+		vertexBufferMemory);
+
+	copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
+	vkDestroyBuffer(device, stagingBuffer, nullptr);
+	vkFreeMemory(device, stagingMemory, nullptr);
+
+}
+
+void MyVlk::copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
+
+	//gotta create a commandbuffer to send commands in to copy from slower gpu buffer to another high perfoormance gpu buffer
+	VkCommandBufferAllocateInfo allocInfo{};
+	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	allocInfo.commandPool = commandPool;
+	allocInfo.commandBufferCount = 1;
+
+	VkCommandBuffer commandBuffer;
+	vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
+
+	VkCommandBufferBeginInfo beginInfo{};
+	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+	vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+	VkBufferCopy copyRegion{};
+	copyRegion.srcOffset = 0; // Optional
+	copyRegion.dstOffset = 0; // Optional
+	copyRegion.size = size;
+	vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+
+	vkEndCommandBuffer(commandBuffer);
+
+	VkSubmitInfo submitInfo{};
+	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submitInfo.commandBufferCount = 1;
+	submitInfo.pCommandBuffers = &commandBuffer;
+
+	vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+	vkQueueWaitIdle(graphicsQueue);
+	vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+
+
 }
 
 uint32_t MyVlk::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
@@ -154,7 +246,9 @@ void MyVlk::recordCommandBuffer(VkCommandBuffer cmdBfr, uint32_t imageIndex) {
 	vkCmdBindPipeline(cmdBfr, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 	VkBuffer vertexBuffers[] = { vertexBuffer };
 	VkDeviceSize offsets[] = { 0 };
+	
 	vkCmdBindVertexBuffers(cmdBfr, 0, 1, vertexBuffers, offsets);
+	vkCmdBindIndexBuffer(cmdBfr, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
 
 	VkViewport viewport{};
@@ -174,8 +268,8 @@ void MyVlk::recordCommandBuffer(VkCommandBuffer cmdBfr, uint32_t imageIndex) {
 
 
 
-	vkCmdDraw(cmdBfr, static_cast<uint32_t>(vertices.size()),1,0,0);
-
+	//vkCmdDraw(cmdBfr, static_cast<uint32_t>(vertices.size()),1,0,0);
+	vkCmdDrawIndexed(cmdBfr, static_cast<uint32_t>(indexIndices.size()), 1, 0, 0, 0);
 
 	vkCmdEndRendering(cmdBfr);
 
@@ -211,9 +305,6 @@ void MyVlk::drawFrame() {
 	vkResetFences(device, 1, &inFlightFences[currentFrame]);
 
 	vkResetCommandBuffer(commandBuffers[currentFrame], 0);
-
-
-	
 	recordCommandBuffer(commandBuffers[currentFrame], imageIndex);//lottashit happening in this func 
 	/////////RELATED!!!!!!
 	VkSubmitInfo submitInfo{};
@@ -301,6 +392,7 @@ void MyVlk::initVulkan() {
 	createGraphicsPipeline();
 	createCommandPool();
 	createVertexBuffer();
+	createIndexBuffer();
 	createCommandBuffers();
 	createSyncObjects();
 	
@@ -330,7 +422,9 @@ void MyVlk::cleanup() {
 	}
 	
 	cleanupSwapChain();
-	
+	vkDestroyBuffer(device, indexBuffer, nullptr);
+	vkFreeMemory(device, indexBufferMemory, nullptr);
+
 	vkDestroyBuffer(device, vertexBuffer, nullptr);
 	vkFreeMemory(device, vertexBufferMemory, nullptr);
 

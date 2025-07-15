@@ -73,7 +73,16 @@ void MyVlk::initWindow() {
 	window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
 	glfwSetWindowUserPointer(window, this);
 	glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
+	glfwSetKeyCallback(window, keyCallback);
+
 }
+
+void MyVlk::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+		glfwSetWindowShouldClose(window, GLFW_TRUE);
+	}
+}
+
 
 void MyVlk::framebufferResizeCallback(GLFWwindow* window, int width, int height) {
 	auto app = reinterpret_cast<MyVulkanInit*>(glfwGetWindowUserPointer(window));
